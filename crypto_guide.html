@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>暗号のしくみ — 基礎から TLS・耐量子暗号まで</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Shippori+Mincho:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme: light;
+  --paper:#F2F4F1;
+  --sheet:#FBFCFA;
+  --ink:#1B2638;
+  --muted:#566070;
+  --rule:#C9D1CD;
+  --pub:#0F7A6C;
+  --pub-tint:#D7EEE9;
+  --sec:#9A6A08;
+  --sec-tint:#F5E6C3;
+  --warn:#A3392B;
+  --warn-tint:#F6DEDA;
+  --code-bg:#E7EBE8;
+  --serif:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
+  --sans:"BIZ UDPGothic","Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+  --mono:ui-monospace,"SFMono-Regular",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    color-scheme: dark;
+    --paper:#151A20;
+    --sheet:#1C232B;
+    --ink:#E3E8E6;
+    --muted:#9AA5B1;
+    --rule:#36414C;
+    --pub:#5CCDB8;
+    --pub-tint:#173A36;
+    --sec:#E8B649;
+    --sec-tint:#3D3118;
+    --warn:#F08A7A;
+    --warn-tint:#43231F;
+    --code-bg:#252E37;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.85;}
+a{color:var(--pub);text-underline-offset:3px}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--pub);outline-offset:2px}
+.layout{display:grid;grid-template-columns:240px minmax(0,1fr);max-width:1120px;margin:0 auto;gap:56px;padding:0 28px}
+nav.toc{position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;padding:48px 0 32px}
+nav.toc h2{font-family:var(--serif);font-size:15px;margin:0 0 12px;font-weight:700}
+nav.toc ol{list-style:none;margin:0;padding:0;counter-reset:ch}
+nav.toc li{counter-increment:ch;margin:0}
+nav.toc a{display:grid;grid-template-columns:2.2em 1fr;color:var(--muted);text-decoration:none;font-size:14px;line-height:1.5;padding:6px 0;border-top:1px solid var(--rule)}
+nav.toc a::before{content:counter(ch);font-family:var(--serif);color:var(--ink)}
+nav.toc a:hover{color:var(--ink)}
+main{max-width:46em;padding:48px 0 120px}
+header.hero{padding:40px 0 48px;border-bottom:1px solid var(--rule);margin-bottom:24px}
+.hero h1{font-family:var(--serif);font-weight:700;font-size:clamp(44px,7vw,76px);line-height:1.15;margin:0 0 20px;letter-spacing:.02em}
+.hero .lead{font-size:18px;color:var(--muted);margin:0 0 32px;max-width:34em}
+.keycode{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--rule);background:var(--sheet)}
+.keycode div{padding:16px 18px;font-size:15px;line-height:1.6}
+.keycode div+div{border-left:1px solid var(--rule)}
+.keycode b{display:block;font-size:16px;margin-bottom:4px}
+.keycode .k-pub b{color:var(--pub)}
+.keycode .k-sec b{color:var(--sec)}
+.keycode .swatch{display:inline-block;width:12px;height:12px;margin-right:8px;vertical-align:-1px}
+.k-pub .swatch{background:var(--pub)}
+.k-sec .swatch{background:var(--sec)}
+section{padding-top:48px}
+section h2{font-family:var(--serif);font-weight:700;font-size:32px;line-height:1.35;margin:0 0 8px;display:flex;gap:.6em;align-items:baseline}
+section h2 .no{font-size:18px;color:var(--muted);font-weight:500;min-width:2.4em}
+section h3{font-family:var(--serif);font-weight:700;font-size:21px;margin:40px 0 8px}
+p{margin:0 0 1.1em}
+.pub{color:var(--pub);font-weight:700}
+.sec{color:var(--sec);font-weight:700}
+.math{font-family:var(--mono);font-size:.92em;background:var(--code-bg);padding:.1em .4em;border-radius:3px;white-space:nowrap}
+.formula{font-family:var(--mono);font-size:16px;background:var(--sheet);border-left:3px solid var(--ink);padding:14px 18px;margin:0 0 1.2em;line-height:1.9;overflow-x:auto}
+table{width:100%;border-collapse:collapse;margin:8px 0 1.6em;font-size:15px;line-height:1.6;background:var(--sheet)}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-weight:700;border-bottom:2px solid var(--ink)}
+td.num{font-family:var(--mono);text-align:right;white-space:nowrap}
+.table-wrap{overflow-x:auto}
+.note{background:var(--sheet);border:1px solid var(--rule);padding:16px 20px;margin:0 0 1.4em;font-size:15.5px}
+.note.warn{border-color:var(--warn);background:var(--warn-tint)}
+.note.warn strong{color:var(--warn)}
+ol.timeline{list-style:none;padding:0;margin:8px 0 1.6em;border-left:2px solid var(--ink)}
+ol.timeline li{display:grid;grid-template-columns:7.5em 1fr;gap:12px;padding:8px 0 8px 18px;position:relative;font-size:15.5px;line-height:1.65}
+ol.timeline li::before{content:"";position:absolute;left:-6px;top:16px;width:10px;height:10px;background:var(--paper);border:2px solid var(--ink);border-radius:50%}
+ol.timeline time{font-family:var(--serif);font-weight:700}
+ol.steps{padding-left:1.4em;margin:0 0 1.4em}
+ol.steps li{margin-bottom:.5em}
+ul{padding-left:1.4em;margin:0 0 1.2em}
+li{margin-bottom:.35em}
+figure{margin:8px 0 1.6em;background:var(--sheet);border:1px solid var(--rule);padding:18px}
+figure svg{display:block;width:100%;height:auto}
+figcaption{font-size:14px;color:var(--muted);margin-top:10px}
+.lab{background:var(--sheet);border:1px solid var(--ink);margin:12px 0 1.8em}
+.lab-head{padding:10px 18px;border-bottom:1px solid var(--rule);font-weight:700;font-size:15px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.lab-head span{font-weight:400;color:var(--muted)}
+.lab-body{padding:18px}
+.lab label{display:block;font-size:14px;color:var(--muted);margin-bottom:4px}
+.lab input[type=text],.lab input[type=number]{width:100%;font:inherit;font-family:var(--mono);font-size:15px;padding:8px 10px;border:1px solid var(--rule);background:var(--paper);color:var(--ink);border-radius:4px}
+.lab .row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.lab .row.two{grid-template-columns:1fr 1fr}
+.lab .out{font-family:var(--mono);font-size:15px;line-height:1.8;background:var(--paper);border:1px solid var(--rule);padding:12px 14px;word-break:break-all;min-height:3em}
+.lab .err{color:var(--warn);font-size:14px;margin-top:6px;min-height:1.4em}
+.lab input[type=range]{width:100%;accent-color:var(--pub)}
+.lab button{font:inherit;font-size:15px;padding:8px 16px;border:1px solid var(--ink);background:var(--ink);color:var(--paper);border-radius:4px;cursor:pointer}
+.lab button:hover{opacity:.88}
+dl.glossary{display:grid;grid-template-columns:11em 1fr;gap:0;margin:8px 0 0;border-top:1px solid var(--rule)}
+dl.glossary dt,dl.glossary dd{padding:10px 0;border-bottom:1px solid var(--rule);margin:0;font-size:15.5px;line-height:1.65}
+dl.glossary dt{font-weight:700;padding-right:12px}
+footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--rule);font-size:14px;color:var(--muted)}
+@media (max-width:900px){
+  .layout{grid-template-columns:1fr;gap:0;padding:0 18px}
+  nav.toc{position:static;max-height:none;padding:28px 0 0}
+  nav.toc ol{columns:2;column-gap:20px}
+  main{padding-top:8px}
+  .lab .row{grid-template-columns:1fr 1fr}
+}
+@media (max-width:560px){
+  body{font-size:16px}
+  nav.toc ol{columns:1}
+  .keycode{grid-template-columns:1fr}
+  .keycode div+div{border-left:0;border-top:1px solid var(--rule)}
+  ol.timeline li{grid-template-columns:1fr;gap:0}
+  dl.glossary{grid-template-columns:1fr}
+  dl.glossary dt{border-bottom:0;padding-bottom:0}
+  section h2{font-size:26px}
+}
+@media print{
+  nav.toc{display:none}
+  .layout{display:block}
+  .lab{display:none}
+  body{background:#fff}
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc" aria-label="目次">
+  <h2>目次</h2>
+  <ol>
+    <li><a href="#purpose">暗号が守るもの</a></li>
+    <li><a href="#history">暗号の歴史</a></li>
+    <li><a href="#symmetric">共通鍵暗号</a></li>
+    <li><a href="#hash">ハッシュ関数と MAC</a></li>
+    <li><a href="#rsa">公開鍵暗号と RSA</a></li>
+    <li><a href="#dh">鍵共有と楕円曲線</a></li>
+    <li><a href="#sign">デジタル署名と証明書</a></li>
+    <li><a href="#tls">TLS 1.3</a></li>
+    <li><a href="#daily">身近な暗号</a></li>
+    <li><a href="#pqc">量子コンピュータと暗号</a></li>
+    <li><a href="#practice">実務での注意点</a></li>
+    <li><a href="#glossary">用語集</a></li>
+  </ol>
+</nav>
+<main>
+<header class="hero">
+  <h1>暗号のしくみ</h1>
+  <p class="lead">シーザー暗号から RSA、楕円曲線、TLS 1.3、耐量子暗号まで。数式は小さな数で手を動かしながら、何がなぜ安全なのかを順に説明します。</p>
+  <div class="keycode" aria-label="この資料での色の使い方">
+    <div class="k-pub"><b><span class="swatch" aria-hidden="true"></span>公開してよいもの</b>公開鍵、公開値、暗号文など。盗聴者に見られても安全性は崩れません。</div>
+    <div class="k-sec"><b><span class="swatch" aria-hidden="true"></span>秘密にするもの</b>秘密鍵、共通鍵、選んだ素数など。漏れた時点で安全性が失われます。</div>
+  </div>
+</header>
+<section id="purpose">
+  <h2><span class="no">第1章</span>暗号が守るもの</h2>
+  <p>「暗号」というと内容を隠すことを思い浮かべがちですが、現代の暗号技術が守っているのは秘密だけではありません。情報セキュリティでは、暗号に期待する役割を大きく4つに分けて考えます。</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>性質</th><th>意味</th><th>主な技術</th></tr></thead>
+    <tbody>
+      <tr><td>機密性</td><td>許可された人以外には内容が読めない</td><td>共通鍵暗号、公開鍵暗号</td></tr>
+      <tr><td>完全性</td><td>途中で書き換えられていないことがわかる</td><td>ハッシュ関数、MAC、AEAD</td></tr>
+      <tr><td>認証</td><td>通信相手やデータの作成者が本物だとわかる</td><td>MAC、デジタル署名、証明書</td></tr>
+      <tr><td>否認防止</td><td>作成者が後から「自分ではない」と言えない</td><td>デジタル署名</td></tr>
+    </tbody>
+  </table></div>
+  <p>もう一つ重要な考え方が<strong>ケルクホフスの原理</strong>です。「暗号の安全性は、方式（アルゴリズム）が知られていても鍵さえ秘密なら保たれるべきだ」というもので、19世紀に提唱されました。現代の標準暗号はすべて仕組みが公開されており、世界中の研究者が攻撃を試みても破られないことで信頼を得ています。方式を隠すことで安全を保とうとする「隠蔽によるセキュリティ」は、仕組みが漏れた瞬間に崩れるため推奨されません。</p>
+</section>
+
+<section id="history">
+  <h2><span class="no">第2章</span>暗号の歴史</h2>
+  <p>暗号の歴史は、作る側と破る側の競争の歴史でもあります。主な出来事を時系列で並べます。</p>
+  <ol class="timeline">
+    <li><time>紀元前1世紀</time><span>ユリウス・カエサルが、文字をアルファベット順に3つずらすシーザー暗号を使ったとされる。</span></li>
+    <li><time>9世紀</time><span>アラブの学者アル＝キンディーが頻度分析を記述。文字の出現頻度の偏りから単純な置換暗号が解けるようになる。</span></li>
+    <li><time>16世紀</time><span>ヴィジュネル暗号が登場。鍵となる単語に従ってずらす量を文字ごとに変え、頻度分析を難しくした。</span></li>
+    <li><time>1917年</time><span>バーナムが鍵とメッセージを排他的論理和で組み合わせる方式を考案。後のワンタイムパッドの原型となる。</span></li>
+    <li><time>1940年代</time><span>第二次世界大戦で独軍の暗号機エニグマが使われ、英国のチューリングらがその解読に成功する。</span></li>
+    <li><time>1949年</time><span>シャノンが情報理論に基づき、使い捨ての真の乱数鍵（ワンタイムパッド）が理論上解読不能であることを証明。</span></li>
+    <li><time>1976年</time><span>ディフィーとヘルマンが公開鍵暗号の概念と鍵共有方式を発表。鍵配送問題に解決の道が開かれる。</span></li>
+    <li><time>1977年</time><span>リベスト、シャミア、エーデルマンが RSA を発表。同年、DES が米国の標準暗号になる。</span></li>
+    <li><time>1985年</time><span>コブリッツとミラーがそれぞれ楕円曲線暗号を提案。</span></li>
+    <li><time>2001年</time><span>公開コンペを経て Rijndael が AES として米国標準に採用され、DES の後継となる。</span></li>
+    <li><time>2018年</time><span>TLS 1.3 が RFC 8446 として標準化。前方秘匿性のある鍵共有が必須になる。</span></li>
+    <li><time>2024年</time><span>NIST が耐量子暗号の最初の標準（FIPS 203・204・205）を発行。</span></li>
+  </ol>
+
+  <h3>シーザー暗号を試す</h3>
+  <p>シーザー暗号の「鍵」はずらす量だけなので、候補は25通りしかありません。全部試せばすぐに解けてしまいます。この「鍵の候補の数」を鍵空間と呼び、現代の暗号では 2¹²⁸ 以上が標準です。</p>
+  <div class="lab" id="caesar">
+    <div class="lab-head">シーザー暗号<span>英字のみ変換されます</span></div>
+    <div class="lab-body">
+      <label for="c-in">平文</label>
+      <input type="text" id="c-in" value="ATTACK AT DAWN" autocomplete="off">
+      <div style="margin:14px 0">
+        <label for="c-shift">ずらす量（鍵）: <span id="c-shift-val" class="sec">3</span></label>
+        <input type="range" id="c-shift" min="1" max="25" value="3">
+      </div>
+      <label>暗号文</label>
+      <div class="out pub" id="c-out" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
+<section id="symmetric">
+  <h2><span class="no">第3章</span>共通鍵暗号</h2>
+  <p>暗号化と復号に<span class="sec">同じ鍵</span>を使う方式です。対称鍵暗号とも呼ばれます。計算が非常に速く、大量のデータの暗号化はほぼすべてこの方式で行われています。</p>
+
+  <h3>ブロック暗号とストリーム暗号</h3>
+  <p><strong>ブロック暗号</strong>はデータを決まった長さ（AES なら128ビット＝16バイト）のブロックに区切り、ブロックごとに変換します。現在の標準は <strong>AES</strong> で、鍵長は128・192・256ビットから選べます。内部では、バイトの置き換え、行のずらし、列の混ぜ合わせ、鍵との排他的論理和を1ラウンドとして、10〜14ラウンド繰り返します。多くの CPU に AES 専用の命令が組み込まれており、ハードウェアで高速に処理できます。</p>
+  <p><strong>ストリーム暗号</strong>は、鍵から疑似乱数の列（鍵ストリーム）を作り、データと1ビットずつ排他的論理和を取ります。代表は <strong>ChaCha20</strong> で、AES 命令を持たないスマートフォンなどでも高速に動くため、TLS で AES と並んで広く使われています。</p>
+
+  <h3>暗号利用モード</h3>
+  <p>ブロック暗号で長いデータを暗号化するときの「ブロックのつなぎ方」を暗号利用モードと言います。選び方を誤ると、AES 自体が強くても安全性が崩れます。</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>モード</th><th>仕組み</th><th>評価</th></tr></thead>
+    <tbody>
+      <tr><td>ECB</td><td>各ブロックを独立に暗号化</td><td>同じ平文ブロックが同じ暗号文になり、画像を暗号化すると輪郭が透けて見える。使ってはいけない</td></tr>
+      <tr><td>CBC</td><td>前の暗号文ブロックを次の平文に混ぜる</td><td>古い方式。改ざん検知がなく、実装次第でパディングオラクル攻撃を受ける</td></tr>
+      <tr><td>CTR</td><td>カウンターを暗号化して鍵ストリームを作る</td><td>ブロック暗号をストリーム暗号として使う。単体では改ざん検知がない</td></tr>
+      <tr><td>GCM</td><td>CTR に改ざん検知用のタグ計算を組み合わせる</td><td>現在の標準。暗号化と完全性の確認を同時に行う</td></tr>
+    </tbody>
+  </table></div>
+  <p>GCM のように、暗号化と改ざん検知を一体で提供する方式を <strong>AEAD</strong>（認証付き暗号）と呼びます。TLS 1.3 で使える共通鍵暗号は AES-GCM、ChaCha20-Poly1305 などの AEAD だけです。</p>
+  <div class="note warn"><strong>ナンスの使い回しに注意。</strong> GCM や ChaCha20 では、暗号化のたびに「ナンス」と呼ばれる一度きりの値を使います。同じ鍵で同じナンスを2回使うと、2つの平文の排他的論理和が漏れ、GCM では改ざん防止の鍵まで推測されてしまいます。</div>
+
+  <h3>鍵配送問題</h3>
+  <p>共通鍵暗号の最大の弱点は、通信を始める前に相手と<span class="sec">同じ鍵</span>を共有しなければならないことです。盗聴されている通信路で鍵をそのまま送れば盗まれ、鍵を暗号化して送ろうとすると「その鍵をどう渡すか」という同じ問題に戻ってしまいます。この堂々巡りを解決したのが、第5章・第6章の公開鍵暗号と鍵共有です。</p>
+</section>
+
+<section id="hash">
+  <h2><span class="no">第4章</span>ハッシュ関数と MAC</h2>
+  <p><strong>暗号学的ハッシュ関数</strong>は、任意の長さのデータから固定長の値（ハッシュ値、ダイジェスト）を計算する関数です。データの「指紋」のようなもので、鍵を使わず、誰が計算しても同じ結果になります。暗号化とは違い、ハッシュ値から元のデータに戻すことはできません。</p>
+  <p>安全なハッシュ関数には次の3つの性質が求められます。</p>
+  <ul>
+    <li><strong>原像計算困難性</strong>：ハッシュ値から元のデータを求められない。</li>
+    <li><strong>第二原像計算困難性</strong>：あるデータと同じハッシュ値になる別のデータを見つけられない。</li>
+    <li><strong>衝突困難性</strong>：同じハッシュ値になるデータの組を、どんな組でもよいから見つけられない。</li>
+  </ul>
+  <p>さらに、入力が1ビット変わるだけで出力のおよそ半分のビットが変わる「雪崩効果」があります。現在の標準は SHA-256 などの SHA-2 ファミリーと SHA-3 です。MD5 と SHA-1 は衝突が実際に作られており、署名などの安全性が必要な用途には使えません。</p>
+
+  <div class="lab" id="hashlab">
+    <div class="lab-head">SHA-256 の雪崩効果<span>1文字だけ変えてみてください</span></div>
+    <div class="lab-body">
+      <label for="h-in">入力</label>
+      <input type="text" id="h-in" value="こんにちは" autocomplete="off">
+      <label style="margin-top:14px">SHA-256 ハッシュ値（16進数64桁＝256ビット）</label>
+      <div class="out pub" id="h-out" aria-live="polite"></div>
+      <div class="err" id="h-diff" style="color:var(--muted)"></div>
+    </div>
+  </div>
+
+  <h3>MAC：鍵付きのハッシュ</h3>
+  <p>ハッシュ値だけでは改ざんは防げません。攻撃者がデータを書き換えたうえで、ハッシュ値も計算し直せばよいからです。そこで<span class="sec">共通鍵</span>を混ぜて計算するのが <strong>MAC</strong>（メッセージ認証コード）です。鍵を知る人しか正しい値を作れないので、改ざんの検知と送信者の確認ができます。代表的なものは HMAC-SHA256 です。ただし送受信者が同じ鍵を持つため、「どちらが作ったか」を第三者に証明すること（否認防止）はできません。それにはデジタル署名が必要です。</p>
+
+  <h3>パスワードの保存</h3>
+  <p>サービスがパスワードを保存するときは、平文ではなくハッシュ値を保存します。ただし SHA-256 は高速すぎるため、漏洩したハッシュ値に対して GPU で毎秒何十億回も総当たりされてしまいます。パスワード保存には、わざと計算を重くし、大量のメモリを必要とするよう設計された <strong>Argon2id</strong>、<strong>scrypt</strong>、<strong>bcrypt</strong> を使います。また、ユーザーごとに異なるランダムな値（ソルト）を混ぜることで、同じパスワードでも異なるハッシュ値になり、事前計算した対応表（レインボーテーブル）による攻撃を防ぎます。</p>
+</section>
+<section id="rsa">
+  <h2><span class="no">第5章</span>公開鍵暗号と RSA</h2>
+  <p>公開鍵暗号では、暗号化に使う<span class="pub">公開鍵</span>と復号に使う<span class="sec">秘密鍵</span>が別々です。公開鍵は誰に見せてもよく、それで暗号化されたデータは秘密鍵の持ち主しか復号できません。代表的な方式が RSA で、「2つの素数を掛けるのは簡単だが、積から元の素数を求める（素因数分解）のは非常に難しい」という性質に安全性の根拠を置いています。</p>
+
+  <h3>鍵の作り方</h3>
+  <ol class="steps">
+    <li>大きな素数 <span class="sec">p</span> と <span class="sec">q</span> を選ぶ。</li>
+    <li><span class="pub">n</span> = <span class="sec">p</span> × <span class="sec">q</span> を計算する。</li>
+    <li><span class="sec">φ(n)</span> = (<span class="sec">p</span> − 1)(<span class="sec">q</span> − 1) を計算する。</li>
+    <li><span class="sec">φ(n)</span> と互いに素な <span class="pub">e</span> を選ぶ（実用では 65537）。</li>
+    <li><span class="pub">e</span> × <span class="sec">d</span> を <span class="sec">φ(n)</span> で割った余りが 1 になる <span class="sec">d</span> を求める。</li>
+  </ol>
+  <p>公開鍵は (<span class="pub">e</span>, <span class="pub">n</span>)、秘密鍵は <span class="sec">d</span> です。暗号化と復号は次の式で行います。</p>
+  <div class="formula">暗号化　<span class="pub">c</span> = m<sup class="pub">e</sup> mod <span class="pub">n</span><br>復号　　m = <span class="pub">c</span><sup class="sec">d</sup> mod <span class="pub">n</span></div>
+  <p>元に戻る理由はオイラーの定理です。<span class="pub">e</span><span class="sec">d</span> は <span class="sec">φ(n)</span> の倍数＋1 なので、m を <span class="pub">e</span><span class="sec">d</span> 乗すると mod <span class="pub">n</span> で m に戻ります。攻撃者が <span class="sec">d</span> を求めるには <span class="sec">φ(n)</span> が必要で、それには <span class="pub">n</span> の素因数分解が必要になります。</p>
+
+  <h3>繰り返し二乗法</h3>
+  <p>実際の RSA では <span class="pub">n</span> も <span class="sec">d</span> も600桁級なので、m を <span class="sec">d</span> 回掛けるのは不可能です。そこで、掛け算のたびに mod を取って数を小さく保ち、指数を2進数に分解して「2乗」と「掛け算」を組み合わせます。例えば 65<sup>17</sup> mod 3233 は、17 = 16 + 1 なので 65 を4回2乗して 65<sup>16</sup> を作り、65 を1回掛けるだけで済みます。指数の桁数に比例する回数で計算できるため、巨大な指数でも一瞬です。公開指数に 65537（2<sup>16</sup>＋1）が好まれるのも、この計算が少なくて済むからです。</p>
+
+  <div class="lab" id="rsalab">
+    <div class="lab-head">RSA 計算機<span>小さな素数で全ステップを確認できます</span></div>
+    <div class="lab-body">
+      <div class="row">
+        <div><label for="r-p">素数 p</label><input type="number" id="r-p" value="61" min="3"></div>
+        <div><label for="r-q">素数 q</label><input type="number" id="r-q" value="53" min="3"></div>
+        <div><label for="r-e">公開指数 e</label><input type="number" id="r-e" value="17" min="3"></div>
+        <div><label for="r-m">平文 m</label><input type="number" id="r-m" value="65" min="0"></div>
+      </div>
+      <button type="button" id="r-run">計算する</button>
+      <div class="err" id="r-err" role="alert"></div>
+      <div class="out" id="r-out" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <h3>実際の使い方と注意点</h3>
+  <p>上の式をそのまま使う「教科書的 RSA」には弱点があります。同じ平文は常に同じ暗号文になるため、候補が少ない平文は総当たりで当てられます。また、暗号文に細工すると復号結果も予測どおりに変化してしまいます。実用では、暗号化前に <strong>OAEP</strong> というパディングでランダムな値を混ぜ込みます。署名では同様に <strong>PSS</strong> を使います。</p>
+  <p>RSA は共通鍵暗号より桁違いに遅く、一度に暗号化できるのも鍵の大きさより小さなデータだけです。そのため、データ本体は AES で暗号化し、その共通鍵だけを公開鍵暗号で守る<strong>ハイブリッド暗号</strong>が基本形になります。現在の推奨鍵長は2048ビット以上で、長期の利用には3072ビット以上が勧められています。</p>
+</section>
+
+<section id="dh">
+  <h2><span class="no">第6章</span>鍵共有と楕円曲線</h2>
+  <p>Diffie-Hellman（DH）鍵共有は、盗聴されている通信路で、送ったものを全部見られても、2人だけが同じ秘密の値を手に入れる方法です。何かを暗号化して送るのではなく、双方が自分の手元で同じ値を「計算して作る」のが特徴です。</p>
+
+  <h3>小さな数で試す</h3>
+  <p>公開パラメータを <span class="pub">p = 23</span>、<span class="pub">g = 5</span> とします。</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th></th><th>クライアント</th><th>サーバー</th></tr></thead>
+    <tbody>
+      <tr><td>秘密の数を選ぶ</td><td><span class="sec">a = 6</span></td><td><span class="sec">b = 15</span></td></tr>
+      <tr><td>公開値を作って送る</td><td><span class="pub">A</span> = 5⁶ mod 23 = <span class="pub">8</span></td><td><span class="pub">B</span> = 5¹⁵ mod 23 = <span class="pub">19</span></td></tr>
+      <tr><td>受け取った値で計算</td><td>19⁶ mod 23 = <span class="sec">2</span></td><td>8¹⁵ mod 23 = <span class="sec">2</span></td></tr>
+    </tbody>
+  </table></div>
+  <p>どちらも g<sup>ab</sup> を計算しているので同じ値になります。盗聴者が見られるのは 23、5、8、19 だけで、「5 を何乗すると23で割った余りが8になるか」を逆算する<strong>離散対数問題</strong>は、数が大きくなると解けません。</p>
+
+  <h3>楕円曲線への置き換え</h3>
+  <p>楕円曲線暗号（ECC）では、y² = x³ + ax + b という曲線上の点を使います。曲線上の2点を通る直線と曲線の3つ目の交点を x 軸で折り返す操作を「点の足し算」と定義し、点 G を k 回足したものを kG と書きます。DH の g<sup>a</sup> が点の掛け算 aG に置き換わり、双方が a(bG) = b(aG) = abG という同じ点を得ます。G と aG から a を求める楕円曲線離散対数問題には、素因数分解のような効率的な近道が知られていないため、ずっと短い鍵で同じ強さが得られます。</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>安全性の強さ</th><th>共通鍵暗号</th><th>RSA・DH</th><th>楕円曲線</th></tr></thead>
+    <tbody>
+      <tr><td>112ビット相当</td><td class="num">3DES</td><td class="num">2048ビット</td><td class="num">224ビット</td></tr>
+      <tr><td>128ビット相当</td><td class="num">AES-128</td><td class="num">3072ビット</td><td class="num">256ビット</td></tr>
+      <tr><td>256ビット相当</td><td class="num">AES-256</td><td class="num">15360ビット</td><td class="num">512ビット</td></tr>
+    </tbody>
+  </table></div>
+  <p>TLS でよく使われる曲線は X25519 と P-256 です。</p>
+
+  <h3>使い捨て鍵と前方秘匿性</h3>
+  <p>ECDHE の最後の E は Ephemeral（使い捨て）の意味で、秘密の数を接続ごとに新しく作り、終わったら捨てます。これにより、将来サーバーの長期的な秘密鍵が漏れても、過去に記録された通信は復号できません。この性質を<strong>前方秘匿性</strong>と呼びます。</p>
+  <div class="note warn"><strong>DH だけでは中間者攻撃を防げない。</strong> 攻撃者が通信の間に入り、双方と別々に鍵共有すれば、どちらにも気づかれずに中身を読めます。そのため、鍵共有の値が本物の相手から来たことをデジタル署名で確認する必要があります。</div>
+</section>
+
+<section id="sign">
+  <h2><span class="no">第7章</span>デジタル署名と証明書</h2>
+  <p>デジタル署名は、公開鍵暗号を逆向きに使う技術です。<span class="sec">秘密鍵</span>で署名を作り、<span class="pub">公開鍵</span>で誰でも検証できます。作れるのは本人だけ、確かめるのは誰でもできる、という点で、紙の世界の実印と印鑑証明に似ています。</p>
+  <ol class="steps">
+    <li>署名者はメッセージのハッシュ値 h を計算する。</li>
+    <li>秘密鍵で署名を作る。RSA なら <span class="math">s = h<sup>d</sup> mod n</span>。</li>
+    <li>メッセージと署名 s を送る。</li>
+    <li>検証者は公開鍵で <span class="math">s<sup>e</sup> mod n</span> を計算し、自分で計算したメッセージのハッシュ値と一致するか確かめる。</li>
+  </ol>
+  <p>一致すれば、秘密鍵の持ち主が署名したこと（認証）と、メッセージが改ざんされていないこと（完全性）が同時に確認できます。秘密鍵を持つのは本人だけなので否認防止にもなります。メッセージそのものではなくハッシュ値に署名するのは、長いデータでも1回の計算で済むからです。RSA の他、楕円曲線を使う <strong>ECDSA</strong> や <strong>Ed25519</strong> も広く使われています。</p>
+
+  <h3>公開鍵基盤（PKI）と証明書</h3>
+  <p>署名の検証には相手の公開鍵が必要ですが、その公開鍵が本物かどうかはどう確かめるのでしょうか。偽サーバーが自分の公開鍵を「本物」と言って渡してくる可能性があります。これを解決するのが<strong>証明書</strong>です。</p>
+  <p>証明書には「このドメインの公開鍵はこれである」という情報が書かれ、<strong>認証局（CA）</strong>のデジタル署名が付いています。ブラウザや OS には信頼できるルート認証局の公開鍵があらかじめ組み込まれていて、ルート認証局が中間認証局に署名し、中間認証局がサーバー証明書に署名する、という連鎖をたどって検証します。この連鎖を証明書チェーンと呼びます。証明書には有効期限があり、秘密鍵が漏れた場合などには失効させる仕組みもあります。</p>
+</section>
+
+<section id="tls">
+  <h2><span class="no">第8章</span>TLS 1.3</h2>
+  <p>TLS は HTTPS などで使われる通信の暗号化プロトコルで、これまでの章の技術をすべて組み合わせています。鍵共有に ECDHE、相手の確認に署名と証明書、データの暗号化に AEAD、鍵の導出にハッシュ関数を使います。</p>
+  <figure>
+    <svg viewBox="0 0 640 400" role="img" aria-labelledby="tls-t tls-d">
+      <title id="tls-t">TLS 1.3 ハンドシェイク</title>
+      <desc id="tls-d">クライアントとサーバーが鍵共有の値を交換し、共有秘密を計算した後、サーバーが証明書と署名を暗号化して送り、検証後にアプリケーションデータを暗号化してやり取りする</desc>
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+      <g font-family="BIZ UDPGothic, Hiragino Sans, Yu Gothic, sans-serif">
+        <rect x="20" y="10" width="140" height="40" fill="none" stroke="var(--ink)"/>
+        <text x="90" y="35" text-anchor="middle" font-size="15" fill="var(--ink)" font-weight="700">クライアント</text>
+        <rect x="480" y="10" width="140" height="40" fill="none" stroke="var(--ink)"/>
+        <text x="550" y="35" text-anchor="middle" font-size="15" fill="var(--ink)" font-weight="700">サーバー</text>
+        <line x1="90" y1="50" x2="90" y2="380" stroke="var(--rule)" stroke-dasharray="4 4"/>
+        <line x1="550" y1="50" x2="550" y2="380" stroke="var(--rule)" stroke-dasharray="4 4"/>
+        <text x="320" y="84" text-anchor="middle" font-size="13" fill="var(--ink)">ClientHello ＋ 鍵共有の値</text>
+        <line x1="92" y1="96" x2="546" y2="96" stroke="var(--ink)" stroke-width="1.4" marker-end="url(#ah)"/>
+        <text x="320" y="132" text-anchor="middle" font-size="13" fill="var(--ink)">ServerHello ＋ 鍵共有の値</text>
+        <line x1="548" y1="144" x2="94" y2="144" stroke="var(--ink)" stroke-width="1.4" marker-end="url(#ah)"/>
+        <rect x="130" y="160" width="380" height="32" fill="var(--sec-tint)" stroke="var(--sec)" stroke-width="0.8"/>
+        <text x="320" y="181" text-anchor="middle" font-size="13" fill="var(--ink)">双方で共有秘密を計算し、鍵を導出（ECDHE ＋ HKDF）</text>
+        <text x="320" y="222" text-anchor="middle" font-size="13" fill="var(--ink)">証明書 ＋ 署名 ＋ Finished</text>
+        <line x1="548" y1="234" x2="94" y2="234" stroke="var(--pub)" stroke-width="2" marker-end="url(#ah)"/>
+        <rect x="130" y="250" width="380" height="32" fill="var(--pub-tint)" stroke="var(--pub)" stroke-width="0.8"/>
+        <text x="320" y="271" text-anchor="middle" font-size="13" fill="var(--ink)">クライアントが証明書チェーンと署名を検証</text>
+        <text x="320" y="310" text-anchor="middle" font-size="13" fill="var(--ink)">Finished</text>
+        <line x1="92" y1="322" x2="546" y2="322" stroke="var(--pub)" stroke-width="2" marker-end="url(#ah)"/>
+        <text x="320" y="352" text-anchor="middle" font-size="13" fill="var(--ink)">アプリケーションデータ（AES-GCM など）</text>
+        <line x1="94" y1="364" x2="546" y2="364" stroke="var(--pub)" stroke-width="2" marker-start="url(#ah)" marker-end="url(#ah)"/>
+      </g>
+    </svg>
+    <figcaption>黒い矢印は平文、緑の太い矢印は暗号化されたメッセージ。サーバーの2通目以降はすでに暗号化されています。</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>クライアントが、対応する暗号方式の一覧と ECDHE の公開値を送る。</li>
+    <li>サーバーが方式を選び、自分の ECDHE の公開値を返す。この時点で双方が共有秘密を計算でき、以降のメッセージは暗号化される。</li>
+    <li>サーバーが証明書と、ここまでのやり取りへの署名を送る。クライアントは証明書チェーンをたどって公開鍵を確かめ、署名を検証する。これで中間者攻撃を防ぐ。</li>
+    <li>双方が Finished（ハンドシェイク全体の検証値）を送り、改ざんがなかったことを確認する。</li>
+    <li>以降は共通鍵による AEAD で高速にデータをやり取りする。</li>
+  </ol>
+  <p>TLS 1.2 まではハンドシェイクに2往復必要でしたが、TLS 1.3 では1往復で済みます。また、前方秘匿性のない RSA 鍵交換や、CBC モード、SHA-1 などの古い方式は TLS 1.3 では使えなくなりました。</p>
+</section>
+<section id="daily">
+  <h2><span class="no">第9章</span>身近な暗号</h2>
+  <p>暗号技術はウェブ通信以外にも、日常のさまざまな場面で使われています。</p>
+  <h3>エンドツーエンド暗号化</h3>
+  <p>メッセージアプリの多くは、送信者と受信者の端末だけが鍵を持ち、運営会社のサーバーでも内容を読めない<strong>エンドツーエンド暗号化（E2EE）</strong>を採用しています。代表的な Signal プロトコルでは、鍵共有に楕円曲線 DH を使い、さらに「ダブルラチェット」という仕組みでメッセージごとに鍵を更新します。ある時点の鍵が漏れても、それ以前とそれ以降のメッセージは守られます。TLS がサーバーまでの通信路を守るのに対し、E2EE は通信相手まで全区間を守る点が違います。</p>
+  <h3>ストレージの暗号化</h3>
+  <p>BitLocker（Windows）や FileVault（macOS）、スマートフォンの端末暗号化は、ディスク全体を AES で暗号化します。暗号化に使う鍵は、端末内の専用チップ（TPM やセキュアエンクレーブ）とパスワードや生体認証で守られており、端末を盗まれても中身を取り出せません。</p>
+  <h3>Wi-Fi</h3>
+  <p>無線 LAN の WPA2 や WPA3 は、端末とアクセスポイントの間の通信を AES で暗号化します。WPA3 ではパスワードから鍵を作る手順に SAE という鍵共有方式を使い、通信を録音してもパスワードを総当たりで推測しにくくなっています。</p>
+  <h3>パスキー</h3>
+  <p>パスワードに代わるログイン方式のパスキー（FIDO2/WebAuthn）は、デジタル署名そのものです。端末がサービスごとに鍵ペアを作り、サービス側には<span class="pub">公開鍵</span>だけを登録します。ログイン時はサービスから送られた乱数に<span class="sec">秘密鍵</span>で署名して返すため、サーバーから情報が漏れても使えるものがなく、偽サイトでは署名が成立しないのでフィッシングにも強い仕組みです。</p>
+</section>
+
+<section id="pqc">
+  <h2><span class="no">第10章</span>量子コンピュータと暗号</h2>
+  <p>十分な規模の量子コンピュータが実現すると、<strong>ショアのアルゴリズム</strong>によって素因数分解と離散対数問題が効率よく解けるようになります。つまり RSA、DH、楕円曲線暗号といった現在の公開鍵暗号はすべて破られます。一方、共通鍵暗号とハッシュ関数への影響は<strong>グローバーのアルゴリズム</strong>による総当たりの高速化にとどまり、鍵長を2倍にすれば対策できると考えられています。このため AES-256 や SHA-384 以上への移行が勧められています。</p>
+  <p>現時点で暗号を破れる量子コンピュータは存在しませんが、「今のうちに暗号化された通信を保存しておき、将来量子コンピュータで解読する」攻撃（Harvest now, decrypt later）が懸念されています。長期間秘密にすべき情報ほど、早めの対策が必要です。</p>
+  <h3>耐量子暗号</h3>
+  <p>量子コンピュータでも解けないと考えられている数学的問題に基づく暗号を<strong>耐量子暗号（PQC）</strong>と呼びます。NIST は2024年8月に最初の標準を発行しました。</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>規格</th><th>名称</th><th>用途</th><th>基盤となる問題</th></tr></thead>
+    <tbody>
+      <tr><td>FIPS 203</td><td>ML-KEM</td><td>鍵共有（鍵カプセル化）</td><td>格子問題</td></tr>
+      <tr><td>FIPS 204</td><td>ML-DSA</td><td>デジタル署名</td><td>格子問題</td></tr>
+      <tr><td>FIPS 205</td><td>SLH-DSA</td><td>デジタル署名</td><td>ハッシュ関数</td></tr>
+    </tbody>
+  </table></div>
+  <p>移行期には、新しい方式に未知の弱点が見つかる可能性に備えて、従来の暗号と耐量子暗号を組み合わせる<strong>ハイブリッド方式</strong>が使われています。TLS では X25519 と ML-KEM-768 を組み合わせた鍵共有が、主要なブラウザやクラウドサービスで既に有効になっています。どちらか一方が破られても、もう一方が安全なら通信は守られます。</p>
+</section>
+
+<section id="practice">
+  <h2><span class="no">第11章</span>実務での注意点</h2>
+  <p>暗号の失敗の多くは、アルゴリズムが破られることではなく、使い方の誤りから起きます。</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>用途</th><th>推奨</th><th>避けるべき</th></tr></thead>
+    <tbody>
+      <tr><td>共通鍵暗号</td><td>AES-GCM、ChaCha20-Poly1305</td><td>DES、3DES、RC4、ECB モード</td></tr>
+      <tr><td>ハッシュ</td><td>SHA-256、SHA-384、SHA-3</td><td>MD5、SHA-1</td></tr>
+      <tr><td>パスワード保存</td><td>Argon2id、scrypt、bcrypt</td><td>平文、ソルトなし・高速なハッシュ</td></tr>
+      <tr><td>鍵共有</td><td>X25519、ECDHE、ハイブリッド PQC</td><td>前方秘匿性のない RSA 鍵交換</td></tr>
+      <tr><td>署名</td><td>Ed25519、ECDSA P-256、RSA-PSS 3072</td><td>1024ビット以下の RSA</td></tr>
+      <tr><td>通信プロトコル</td><td>TLS 1.3（互換性が必要なら 1.2）</td><td>SSL、TLS 1.0、TLS 1.1</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li><strong>暗号を自作しない。</strong> 独自のアルゴリズムや、標準部品の独自の組み合わせは、専門家の検証を受けていない限りほぼ確実に弱点を含みます。libsodium や各言語の標準ライブラリなど、実績のある高水準ライブラリを使いましょう。</li>
+    <li><strong>乱数は暗号論的に安全なものを使う。</strong> 鍵やナンスの生成に、Math.random のような予測可能な乱数を使ってはいけません。OS が提供する暗号論的擬似乱数生成器（CSPRNG）を使います。</li>
+    <li><strong>鍵の管理が本体。</strong> 暗号がどれほど強くても、鍵がソースコードに直書きされていたり、ログに出力されていたりすれば意味がありません。鍵は専用の鍵管理サービスやハードウェア（HSM）で保管し、定期的に更新します。</li>
+    <li><strong>比較は一定時間で行う。</strong> MAC やトークンの比較で、一致しない文字が見つかった時点で処理を終えると、処理時間の差から正解が推測されることがあります（タイミング攻撃）。</li>
+    <li><strong>暗号の切り替えに備える。</strong> 将来のアルゴリズム移行（耐量子暗号など）を見越して、使う方式を設定で差し替えられる設計にしておくことを暗号アジリティと呼びます。</li>
+  </ul>
+</section>
+
+<section id="glossary">
+  <h2><span class="no">第12章</span>用語集</h2>
+  <dl class="glossary">
+    <dt>平文・暗号文</dt><dd>暗号化する前のデータと、暗号化した後のデータ。</dd>
+    <dt>鍵空間</dt><dd>鍵として取りうる値の総数。総当たり攻撃にかかる手間を決める。</dd>
+    <dt>AEAD</dt><dd>暗号化と改ざん検知を同時に行う認証付き暗号。AES-GCM、ChaCha20-Poly1305 など。</dd>
+    <dt>ナンス</dt><dd>同じ鍵で一度だけ使う値。再利用すると安全性が崩れる。</dd>
+    <dt>ハッシュ値</dt><dd>ハッシュ関数の出力。データの指紋として改ざん検知や署名に使う。</dd>
+    <dt>MAC</dt><dd>共通鍵を使って計算する改ざん検知用の値。HMAC が代表例。</dd>
+    <dt>ソルト</dt><dd>パスワードのハッシュ化の際にユーザーごとに混ぜるランダムな値。</dd>
+    <dt>公開鍵・秘密鍵</dt><dd>公開鍵暗号で対になる2つの鍵。公開鍵は配ってよく、秘密鍵は本人だけが持つ。</dd>
+    <dt>パディング</dt><dd>暗号化や署名の前にデータを加工する方式。RSA では OAEP や PSS を使う。</dd>
+    <dt>離散対数問題</dt><dd>g と g<sup>a</sup> mod p から a を求める問題。DH の安全性の根拠。</dd>
+    <dt>前方秘匿性</dt><dd>長期的な秘密鍵が漏れても過去の通信が復号されない性質。</dd>
+    <dt>中間者攻撃</dt><dd>通信の間に割り込み、双方になりすまして内容を盗み見たり改ざんしたりする攻撃。</dd>
+    <dt>認証局（CA）</dt><dd>公開鍵の持ち主を確認し、証明書に署名する機関。</dd>
+    <dt>証明書チェーン</dt><dd>ルート認証局から中間認証局、サーバー証明書へと続く署名の連鎖。</dd>
+    <dt>E2EE</dt><dd>送信者と受信者の端末だけが復号できるエンドツーエンド暗号化。</dd>
+    <dt>耐量子暗号</dt><dd>量子コンピュータでも解読できないと考えられている暗号方式。</dd>
+  </dl>
+  <footer>この資料の数値例は仕組みの理解のためのもので、実際の安全な暗号にはここで使った値よりはるかに大きな数とパディングが必要です。</footer>
+</section>
+</main>
+</div>
+
+<script>
+(function(){
+  var cin=document.getElementById('c-in'),cs=document.getElementById('c-shift'),csv=document.getElementById('c-shift-val'),cout=document.getElementById('c-out');
+  function caesar(){
+    var k=parseInt(cs.value,10);csv.textContent=k;
+    cout.textContent=cin.value.replace(/[A-Za-z]/g,function(ch){
+      var base=ch<='Z'?65:97;return String.fromCharCode((ch.charCodeAt(0)-base+k)%26+base);
+    })||'（平文を入力してください）';
+  }
+  cin.addEventListener('input',caesar);cs.addEventListener('input',caesar);caesar();
+
+  var K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  function sha256(bytes){
+    var H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+    var l=bytes.length,bitLen=l*8,padLen=((l+9+63)>>6)<<6,m=new Uint8Array(padLen);
+    m.set(bytes);m[l]=0x80;
+    var dv=new DataView(m.buffer);dv.setUint32(padLen-4,bitLen>>>0);dv.setUint32(padLen-8,Math.floor(bitLen/4294967296));
+    var w=new Uint32Array(64);
+    function r(x,n){return (x>>>n)|(x<<(32-n));}
+    for(var off=0;off<padLen;off+=64){
+      for(var i=0;i<16;i++)w[i]=dv.getUint32(off+i*4);
+      for(i=16;i<64;i++){var s0=r(w[i-15],7)^r(w[i-15],18)^(w[i-15]>>>3),s1=r(w[i-2],17)^r(w[i-2],19)^(w[i-2]>>>10);w[i]=(w[i-16]+s0+w[i-7]+s1)>>>0;}
+      var a=H[0],b=H[1],c=H[2],d=H[3],e=H[4],f=H[5],g=H[6],h=H[7];
+      for(i=0;i<64;i++){
+        var S1=r(e,6)^r(e,11)^r(e,25),ch=(e&f)^(~e&g),t1=(h+S1+ch+K[i]+w[i])>>>0;
+        var S0=r(a,2)^r(a,13)^r(a,22),mj=(a&b)^(a&c)^(b&c),t2=(S0+mj)>>>0;
+        h=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;
+      }
+      H[0]=(H[0]+a)>>>0;H[1]=(H[1]+b)>>>0;H[2]=(H[2]+c)>>>0;H[3]=(H[3]+d)>>>0;H[4]=(H[4]+e)>>>0;H[5]=(H[5]+f)>>>0;H[6]=(H[6]+g)>>>0;H[7]=(H[7]+h)>>>0;
+    }
+    return H.map(function(x){return ('00000000'+x.toString(16)).slice(-8);}).join('');
+  }
+  var hin=document.getElementById('h-in'),hout=document.getElementById('h-out'),hdiff=document.getElementById('h-diff'),prev=null;
+  function bitDiff(x,y){var n=0;for(var i=0;i<x.length;i++){var v=parseInt(x[i],16)^parseInt(y[i],16);while(v){n+=v&1;v>>=1;}}return n;}
+  function hash(){
+    var hx=sha256(new TextEncoder().encode(hin.value));
+    hout.textContent=hx;
+    if(prev&&prev!==hx){hdiff.textContent='直前のハッシュ値と比べて 256 ビット中 '+bitDiff(prev,hx)+' ビットが変化しました。';}
+    else if(!prev){hdiff.textContent='入力を変えると、変化したビット数がここに表示されます。';}
+    prev=hx;
+  }
+  hin.addEventListener('input',hash);hash();
+
+  function isPrime(n){if(n<2n)return false;if(n%2n===0n)return n===2n;for(var i=3n;i*i<=n;i+=2n){if(n%i===0n)return false;}return true;}
+  function gcd(a,b){while(b){var t=a%b;a=b;b=t;}return a;}
+  function modinv(a,m){var o=m,x0=0n,x1=1n;while(a>1n){var q=a/m,t=m;m=a%m;a=t;t=x0;x0=x1-q*x0;x1=t;}return x1<0n?x1+o:x1;}
+  function modpow(b,e,m){var r=1n;b%=m;while(e>0n){if(e&1n)r=r*b%m;b=b*b%m;e>>=1n;}return r;}
+  var rerr=document.getElementById('r-err'),rout=document.getElementById('r-out');
+  function S(cls,t){return '<span class="'+cls+'">'+t+'</span>';}
+  function rsa(){
+    rerr.textContent='';
+    var vals={},ids=['p','q','e','m'];
+    for(var i=0;i<ids.length;i++){
+      var raw=document.getElementById('r-'+ids[i]).value.trim();
+      if(!/^\d+$/.test(raw)){rerr.textContent=ids[i]+' には0以上の整数を入力してください。';rout.innerHTML='';return;}
+      vals[ids[i]]=BigInt(raw);
+    }
+    var p=vals.p,q=vals.q,e=vals.e,m=vals.m;
+    if(p>100000n||q>100000n){rerr.textContent='この計算機では p と q は 100000 以下にしてください。';rout.innerHTML='';return;}
+    if(!isPrime(p)||!isPrime(q)){rerr.textContent='p と q には素数を入力してください。';rout.innerHTML='';return;}
+    if(p===q){rerr.textContent='p と q には異なる素数を選んでください。';rout.innerHTML='';return;}
+    var n=p*q,phi=(p-1n)*(q-1n);
+    if(e<=1n||e>=phi||gcd(e,phi)!==1n){rerr.textContent='e は 1 より大きく φ(n) = '+phi+' より小さい、φ(n) と互いに素な数にしてください。';rout.innerHTML='';return;}
+    if(m>=n){rerr.textContent='平文 m は n = '+n+' より小さくしてください。';rout.innerHTML='';return;}
+    var d=modinv(e,phi),c=modpow(m,e,n),m2=modpow(c,d,n);
+    rout.innerHTML=
+      'n = '+S('sec',p)+' × '+S('sec',q)+' = '+S('pub',n)+'<br>'+
+      'φ(n) = '+(p-1n)+' × '+(q-1n)+' = '+S('sec',phi)+'<br>'+
+      'd = '+S('sec',d)+'（'+e+' × '+d+' mod '+phi+' = '+(e*d%phi)+'）<br>'+
+      '公開鍵 ('+S('pub',e)+', '+S('pub',n)+')　秘密鍵 '+S('sec',d)+'<br>'+
+      '暗号化 c = '+m+'<sup>'+e+'</sup> mod '+n+' = '+S('pub',c)+'<br>'+
+      '復号 '+c+'<sup>'+d+'</sup> mod '+n+' = '+m2+(m2===m?'（元の平文に戻りました）':'');
+  }
+  document.getElementById('r-run').addEventListener('click',rsa);
+  ['p','q','e','m'].forEach(function(id){document.getElementById('r-'+id).addEventListener('input',function(){rerr.textContent='';});});
+  rsa();
+})();
+</script>
+<script src="chat-widget.js" defer></script>
+</body>
+</html>
